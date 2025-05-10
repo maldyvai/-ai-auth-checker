@@ -31,7 +31,7 @@ if menu == "Upload & Analyze":
         filename = uploaded_file.name.lower()
         if filename.endswith((".jpg", ".jpeg", ".png")):
             image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, caption="Original", use_column_width=True)
+            st.image(image, caption="Original", use_container_width=True)
             ela_img, highlight_img, std, regions = analyze_ela(image)
             st.markdown("### Results")
             col1, col2 = st.columns(2)
@@ -39,9 +39,9 @@ if menu == "Upload & Analyze":
             col2.metric("Pixels > threshold", f"{regions}")
             tabs = st.tabs(["ELA", "Highlights"])
             with tabs[0]:
-                st.image(ela_img, use_column_width=True)
+                st.image(ela_img, use_container_width=True)
             with tabs[1]:
-                st.image(highlight_img, use_column_width=True)
+                st.image(highlight_img, use_container_width=True)
         elif filename.endswith(".pdf"):
             doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
             st.success(f"PDF pages: {len(doc)}")
@@ -58,8 +58,8 @@ if menu == "Upload & Analyze":
                     image = Image.open(io.BytesIO(img_data)).convert("RGB")
                     st.image(image, caption=f"Image {idx+1}", width=300)
                     ela_img, highlight_img, std, regions = analyze_ela(image)
-                    st.image(ela_img, caption="ELA", use_column_width=True)
-                    st.image(highlight_img, caption="Highlights", use_column_width=True)
+                    st.image(ela_img, caption="ELA", use_container_width=True)
+                    st.image(highlight_img, caption="Highlights", use_container_width=True)
 elif menu == "Log":
     st.markdown("## Feedback Log")
     log_path = "logs/feedback_log.csv"
