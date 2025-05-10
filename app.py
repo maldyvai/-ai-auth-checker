@@ -1,3 +1,33 @@
+# Custom CSS for streamlit
+st.markdown("""
+    <style>
+        body {
+            background-color: #F2F2F2;
+        }
+        .title {
+            color: #003366;
+        }
+        .button {
+            background-color: #28A745;
+            color: white;
+        }
+        .button:hover {
+            background-color: #1e7e34;
+        }
+        .stButton>button {
+            border-radius: 5px;
+            font-size: 16px;
+            padding: 10px 20px;
+        }
+        .sidebar .sidebar-content {
+            background-color: #003366;
+            color: white;
+        }
+        .stTextInput>label {
+            color: #003366;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 import streamlit as st
 from PIL import Image, ImageChops, ImageEnhance
