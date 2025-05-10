@@ -1,3 +1,12 @@
+import streamlit as st
+from PIL import Image, ImageChops, ImageEnhance
+import numpy as np
+import cv2
+import io
+import fitz  # PyMuPDF
+import os
+
+# Custom CSS for streamlit
 st.markdown("""
     <style>
         body {
@@ -28,53 +37,37 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-import streamlit as st
-from PIL import Image, ImageChops, ImageEnhance
-import numpy as np
-import cv2
-import io
-import fitz  # PyMuPDF
-import os
+# Custom Header and Title
+st.markdown("<h1 class='title'>AI Document & Image Authenticity Checker</h1>", unsafe_allow_html=True)
+st.caption("Detect forged or manipulated documents and images using AI technology.")
 
-def convert_to_ela_image(image, quality=90):
-    temp_io = io.BytesIO()
-    image.save(temp_io, 'JPEG', quality=quality)
-    temp_io.seek(0)
-    compressed = Image.open(temp_io)
-    ela_image = ImageChops.difference(image, compressed)
-    extrema = ela_image.getextrema()
-    max_diff = max([ex[1] for ex in extrema])
-    if max_diff == 0:
-        max_diff = 1
-    scale = 255.0 / max_diff
-    ela_image = ImageEnhance.Brightness(ela_image).enhance(scale)
-    return ela_image
-
-def analyze_ela(image, threshold_value=30):
-    ela = convert_to_ela_image(image)
-    ela_np = np.array(ela)
-    gray = cv2.cvtColor(ela_np, cv2.COLOR_RGB2GRAY)
-    _, thresh = cv2.threshold(gray, threshold_value, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    image_np = np.array(image.copy())
-    suspicious_regions = 0
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        if w > 10 and h > 10:
-            cv2.rectangle(image_np, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            suspicious_regions += 1
-    std_dev = np.std(ela_np)
-    return ela, image_np, std_dev, suspicious_regions
-
-st.set_page_config(page_title="AI Authenticity Checker", layout="wide")
-st.title("🔍 Unified AI Authenticity Checker")
-st.caption("Supports both images and PDFs. Detects possible edits, manipulations, or forgeries.")
-
+# File uploader
 uploaded_file = st.file_uploader("📤 Upload an image or PDF file", type=["jpg", "jpeg", "png", "pdf"])
+
+def analyze_ela(image):
+    # Convert image to numpy array for ELA analysis
+    image_np = np.array(image)
+    
+    # Apply ELA (Error Level Analysis)
+    image_pil = image.copy()
+    enhancer = ImageEnhance.Contrast(image_pil)
+    enhanced_image = enhancer.enhance(2.0)
+    
+    # Perform ELA and highlight suspicious regions
+    ela_image = ImageChops.difference(image_pil, enhanced_image)
+    std = np.std(np.array(ela_image))
+    regions = np.count_nonzero(np.array(ela_image) > 50)
+    
+    highlight_image = np.array(image_pil)
+    highlight_image[ela_image > 50] = [255, 0, 0]  # Highlight suspicious areas in red
+    highlight_image_pil = Image.fromarray(highlight_image)
+    
+    return ela_image, highlight_image_pil, std, regions
 
 if uploaded_file:
     filename = uploaded_file.name.lower()
 
+    # Image Processing section
     if filename.endswith((".jpg", ".jpeg", ".png")):
         image = Image.open(uploaded_file).convert("RGB")
         st.image(image, caption="🖼 Uploaded Image", use_column_width=True)
@@ -86,6 +79,7 @@ if uploaded_file:
         st.subheader("📊 Results:")
         st.write(f"ELA Std Dev: `{std:.2f}` | Suspicious Areas: `{regions}`")
 
+        # Result feedback based on analysis
         if regions > 3 or std > 35:
             st.error("⚠️ Likely manipulated.")
         elif regions > 0:
@@ -94,6 +88,7 @@ if uploaded_file:
             st.success("✅ Image appears authentic.")
 
     elif filename.endswith(".pdf"):
+        # PDF Processing section
         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         st.success(f"📄 PDF loaded: {len(doc)} pages")
 
@@ -108,6 +103,7 @@ if uploaded_file:
             else:
                 st.info("No text detected on this page.")
 
+            # Handle embedded images inside PDFs
             image_list = page.get_images(full=True)
             if image_list:
                 st.subheader("🖼 Embedded Images")
@@ -131,11 +127,10 @@ if uploaded_file:
                         st.warning("⚠️ Some signs of editing.")
                     else:
                         st.success("✅ Appears authentic.")
-            else:
-                st.info("No images detected on this page.")
 
+    # Feedback Section
     feedback = st.radio("📢 Was this analysis helpful?", ["Yes", "No", "Not Sure"])
-    if st.button("Submit Feedback"):
+    if st.button("Submit Feedback", key="feedback", help="Share your feedback on this result"):
         try:
             os.makedirs("logs", exist_ok=True)
             with open("logs/feedback_log.csv", "a") as f:
@@ -143,6 +138,5 @@ if uploaded_file:
             st.success("✅ Feedback submitted. Thank you!")
         except Exception as e:
             st.error(f"Error saving feedback: {e}")
-
 else:
     st.info("Please upload a JPEG/PNG image or a PDF document to begin analysis.")
