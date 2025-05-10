@@ -1,4 +1,3 @@
-# Custom CSS for streamlit
 st.markdown("""
     <style>
         body {
