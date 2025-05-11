@@ -4,43 +4,43 @@ import io
 import numpy as np
 from PIL import Image, ImageChops
 
-def analyze_ela(image: Image.Image, threshold: int = 50):
+def analyze_ela(image: Image.Image, threshold: int = 50, quality: int = 60):
     """
-    Performs Error Level Analysis on a PIL image and returns:
-      - ela_img: a PIL Image showing the scaled ELA result
-      - highlight_img: a PIL Image where pixels above the threshold are highlighted in red
-      - std: the standard deviation of the ELA difference image (grayscale)
-      - regions: the count of pixels above the threshold
+    Error Level Analysis with adjustable JPEG quality.
+    Returns:
+      - ela_img: grayscale ELA image scaled for visibility
+      - highlight_img: original with red overlay where diff > threshold
+      - std: standard deviation of the ELA image
+      - regions: count of pixels above threshold
     """
-    # 1. Re‐save to JPEG at quality=90 to get compression artifacts
+    # 1) Re-save at a lower JPEG quality to amplify compression artifacts
     buf = io.BytesIO()
-    image.save(buf, format="JPEG", quality=90)
+    image.save(buf, format="JPEG", quality=quality)
     buf.seek(0)
     jpeg = Image.open(buf).convert('RGB')
 
-    # 2. Compute absolute difference (ELA)
+    # 2) Compute absolute difference
     diff = ImageChops.difference(image.convert('RGB'), jpeg)
 
-    # 3. Convert to grayscale and find max diff for scaling
-    gray_diff = diff.convert('L')
-    extrema = gray_diff.getextrema()
-    max_diff = extrema[1]
-    scale = 255.0 / max_diff if max_diff != 0 else 1.0
+    # 3) Grayscale & find max for scaling
+    gray = diff.convert('L')
+    max_diff = gray.getextrema()[1]
+    scale = 255.0 / max_diff if max_diff else 1.0
 
-    # 4. Scale the ELA image for visibility
-    ela_img = gray_diff.point(lambda x: x * scale)
+    # 4) Scale up for visibility
+    ela_img = gray.point(lambda x: x * scale)
 
-    # 5. Compute std‐dev of the scaled ELA image
+    # 5) Stats
     ela_np = np.array(ela_img)
     std = float(ela_np.std())
 
-    # 6. Build a binary mask of pixels above the threshold
+    # 6) Mask & count
     mask = ela_np > threshold
     regions = int(mask.sum())
 
-    # 7. Overlay mask in red on the original image
-    highlight_arr = np.array(image.convert('RGB')).copy()
-    highlight_arr[mask] = [255, 0, 0]   # red highlights
-    highlight_img = Image.fromarray(highlight_arr)
+    # 7) Highlight on original
+    orig_np = np.array(image.convert('RGB')).copy()
+    orig_np[mask] = [255, 0, 0]
+    highlight_img = Image.fromarray(orig_np)
 
     return ela_img, highlight_img, std, regions
