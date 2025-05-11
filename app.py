@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import torch
 from datetime import datetime
+from streamlit_drawable_canvas import st_canvas
 
 from helper import analyze_ela
 
@@ -57,13 +58,13 @@ st.markdown(
 # ─── UPLOAD & ANALYZE ─────────────────────────────────────────────────────
 if menu == "Upload & Analyze":
     st.markdown("## Upload Invoice (Photo or PDF)")
-    uploaded = st.file_uploader("", type=["jpg","jpeg","png","pdf"])
+    uploaded = st.file_uploader("", type=["jpg", "jpeg", "png", "pdf"])
     if uploaded:
         name = uploaded.name
         st.markdown(f"**File:** {name}")
 
         # ── PHOTO branch ─────────────────────────────────────────────
-        if name.lower().endswith((".jpg",".jpeg",".png")):
+        if name.lower().endswith((".jpg", ".jpeg", ".png")):
             img = Image.open(uploaded).convert("RGB")
             st.image(img, caption="Original", use_container_width=True)
 
@@ -86,7 +87,7 @@ if menu == "Upload & Analyze":
                 score = "🔍 Uncertain"
             c3.metric("Tamper Score", score)
 
-            tabs = st.tabs(["ELA Image","Highlights"])
+            tabs = st.tabs(["ELA Image", "Highlights"])
             with tabs[0]:
                 st.image(ela_img, use_container_width=True)
             with tabs[1]:
@@ -101,24 +102,56 @@ if menu == "Upload & Analyze":
                 for *b, conf, cls in det:
                     if conf > 0.3:
                         x1, y1, x2, y2 = map(int, b)
-                        cv2.rectangle(box_img, (x1,y1), (x2,y2), (0,255,0), 2)
+                        cv2.rectangle(box_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 st.image(box_img, caption="YOLO Boxes", use_container_width=True)
             else:
                 st.info("No ML model loaded.")
 
-            # ── Feedback ───────────────────────────────────────────────
+            # ── Feedback & Annotation Canvas ────────────────────────────
             st.markdown("#### Was this result correct?")
-            feedback = st.radio("", ["Yes","No"], key=name)
-            if st.button("Submit Feedback", key=name+"_btn"):
-                os.makedirs("logs", exist_ok=True)
-                log_path = "logs/feedback_log.csv"
-                header = not os.path.exists(log_path)
-                with open(log_path, "a") as f:
-                    if header:
-                        f.write("timestamp,filename,std,regions,score,feedback\n")
-                    f.write(f"{datetime.utcnow().isoformat()},{name},{std:.2f},"
-                            f"{regions},{score},{feedback}\n")
-                st.success("Thanks—feedback recorded.")
+            feedback = st.radio("", ["Yes", "No"], key=name)
+            if feedback == "No":
+                st.markdown("### ✏️ Mark the tampered regions")
+                canvas_result = st_canvas(
+                    fill_color="rgba(255, 0, 0, 0.3)",
+                    stroke_width=2,
+                    stroke_color="#ff0000",
+                    background_image=img,
+                    update_streamlit=True,
+                    height=img.height,
+                    width=img.width,
+                    drawing_mode="rect",
+                    key="canvas",
+                )
+                if st.button("Save Annotations", key=name + "_annotate"):
+                    shapes = canvas_result.json_data["objects"]
+                    os.makedirs("new_annotations/images", exist_ok=True)
+                    os.makedirs("new_annotations/labels", exist_ok=True)
+                    # Save image
+                    img.save(f"new_annotations/images/{name}")
+                    # Write YOLO .txt
+                    label_path = f"new_annotations/labels/{os.path.splitext(name)[0]}.txt"
+                    with open(label_path, "w") as ftxt:
+                        for obj in shapes:
+                            left, top = obj["left"], obj["top"]
+                            w, h = obj["width"], obj["height"]
+                            x_c = (left + w/2) / img.width
+                            y_c = (top + h/2) / img.height
+                            w_n = w / img.width
+                            h_n = h / img.height
+                            ftxt.write(f"0 {x_c:.6f} {y_c:.6f} {w_n:.6f} {h_n:.6f}\n")
+                    st.success("Annotations saved for retraining!")
+            else:
+                if st.button("Submit Feedback", key=name + "_btn"):
+                    os.makedirs("logs", exist_ok=True)
+                    log_path = "logs/feedback_log.csv"
+                    header = not os.path.exists(log_path)
+                    with open(log_path, "a") as f:
+                        if header:
+                            f.write("timestamp,filename,std,regions,score,feedback\n")
+                        f.write(f"{datetime.utcnow().isoformat()},{name},"
+                                f"{std:.2f},{regions},{score},{feedback}\n")
+                    st.success("Thanks—feedback recorded.")
 
         # ── PDF branch ───────────────────────────────────────────────
         elif name.lower().endswith(".pdf"):
@@ -126,12 +159,9 @@ if menu == "Upload & Analyze":
             st.success(f"PDF with {len(doc)} pages")
             for i, page in enumerate(doc):
                 st.markdown(f"### Page {i+1}")
-
-                # Text
                 txt = page.get_text().strip() or "No text"
                 st.code(txt)
 
-                # Images on page
                 imgs = page.get_images(full=True)
                 for idx, img_meta in enumerate(imgs):
                     xref = img_meta[0]
@@ -139,7 +169,6 @@ if menu == "Upload & Analyze":
                     page_img = Image.open(io.BytesIO(base["image"])).convert("RGB")
                     st.image(page_img, caption=f"Image {idx+1}", width=300)
 
-                    # ELA on page image
                     ela_img, hl_img, std, regions = analyze_ela(
                         page_img,
                         threshold=threshold,
@@ -160,9 +189,9 @@ elif menu == "Log":
     st.markdown("## Feedback Log")
     log_path = "logs/feedback_log.csv"
     if os.path.exists(log_path):
-        df = open(log_path).read().splitlines()
-        header = df[0].split(",")
-        rows = [row.split(",") for row in df[1:]]
-        st.dataframe(rows, columns=header)
+        lines = open(log_path).read().splitlines()
+        header = lines[0].split(",")
+        data = [row.split(",") for row in lines[1:]]
+        st.dataframe(data, columns=header)
     else:
         st.info("No feedback logged yet.")
