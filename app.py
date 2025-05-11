@@ -68,7 +68,7 @@ if menu == "Upload & Analyze":
             st.image(img, caption="Original", use_container_width=True)
 
             # ELA
-            ela_img, hl_img, std, regions = analyze_ela(img, threshold=threshold)
+            # New call, using stronger JPEG compression ela_img, hl_img, std, regions = analyze_ela(     img,     threshold=threshold,     quality=60 )
 
             st.markdown("### 🔍 ELA Results")
             c1,c2,c3 = st.columns(3)
@@ -130,7 +130,7 @@ if menu == "Upload & Analyze":
                     base = doc.extract_image(xref)
                     img = Image.open(io.BytesIO(base["image"])).convert("RGB")
                     st.image(img, width=300)
-                    ela_img, hl_img, std, regions = analyze_ela(img, threshold=threshold)
+                    # New call, using stronger JPEG compression ela_img, hl_img, std, regions = analyze_ela(     img,     threshold=threshold,     quality=60 )
                     st.image(ela_img, use_container_width=True)
                     st.image(hl_img, use_container_width=True)
                     st.write(f"**Std Dev:** {std:.2f} | **Pixels:** {regions}")
