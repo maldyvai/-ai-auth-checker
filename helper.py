@@ -1,51 +1,44 @@
-from PIL import Image, ImageChops, ImageEnhance
-import numpy as np
 import io
+import numpy as np
+from PIL import Image, ImageChops
 
-def analyze_ela(image: Image.Image, threshold: int = 50, quality: int = 90):
+def analyze_ela(image: Image.Image, threshold: int = 50):
     """
-    Perform Error Level Analysis on the given PIL Image and highlight
-    pixels above the given threshold.
-
-    Args:
-        image: Input PIL Image (RGB).
-        threshold: Grayscale threshold for suspicious pixels.
-        quality: JPEG quality for recompression (lower → more compression).
-
-    Returns:
-        ela_image: PIL Image of the ELA result.
-        highlight_image: PIL Image with suspicious areas marked in red.
-        std_dev: Standard deviation of the ELA image array.
-        regions: Number of pixels above the threshold.
+    Performs Error Level Analysis on a PIL image and returns:
+      - ela_img: a PIL Image showing the scaled ELA result
+      - highlight_img: a PIL Image where pixels above the threshold are highlighted in red
+      - std: the standard deviation of the ELA difference image (grayscale)
+      - regions: the count of pixels above the threshold
     """
-    # 1. Force a uniform JPEG recompression to reintroduce artifacts
-    buffer = io.BytesIO()
-    image.save(buffer, format='JPEG', quality=quality)
-    buffer.seek(0)
-    recompressed = Image.open(buffer).convert('RGB')
+    # 1. Save the image to JPEG in memory (quality=90)
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=90)
+    buf.seek(0)
+    jpeg = Image.open(buf).convert('RGB')
 
-    # 2. Compute the difference (ELA) image
-    ela_image = ImageChops.difference(image, recompressed)
+    # 2. Compute absolute difference (ELA)
+    diff = ImageChops.difference(image.convert('RGB'), jpeg)
 
-    # 3. Scale brightness based on max diff
-    extrema = ela_image.getextrema()
-    max_diff = max(channel_max for _, channel_max in extrema) or 1
-    scale = 255.0 / max_diff
-    ela_image = ImageEnhance.Brightness(ela_image).enhance(scale)
+    # 3. Convert to grayscale and compute scaling factor
+    gray_diff = diff.convert('L')
+    extrema = gray_diff.getextrema()
+    max_diff = extrema[1]
+    scale = 255.0 / max_diff if max_diff != 0 else 1.0
 
-    # 4. Convert to arrays
-    ela_arr = np.array(ela_image)
-    gray = np.array(ela_image.convert('L'))  # single‐channel grayscale
+    # 4. Scale the ELA image for visibility
+    ela_img = gray_diff.point(lambda x: x * scale)
 
-    # 5. Compute stats & mask
-    std_dev = float(np.std(ela_arr))
-    mask = gray > threshold           # boolean mask of suspicious pixels
+    # 5. Convert scaled ELA to numpy for statistics
+    ela_np = np.array(ela_img)
+    std = float(ela_np.std())
+
+    # 6. Create binary mask of pixels above threshold
+    mask = ela_np > threshold
     regions = int(mask.sum())
 
-    # 6. Highlight on original
-    orig_arr = np.array(image)
-    highlight_arr = orig_arr.copy()
-    highlight_arr[mask] = [255, 0, 0]  # red overlay on suspicious pixels
-    highlight_image = Image.fromarray(highlight_arr)
+    # 7. Highlight mask on original image
+    highlight_arr = np.array(image.convert('RGB')).copy()
+    highlight_arr[mask] = [255, 0, 0]
+    highlight_img = Image.fromarray(highlight_arr)
 
-    return ela_image, highlight_image, std_dev, regions
+    return ela_img, highlight_img, std, regions
