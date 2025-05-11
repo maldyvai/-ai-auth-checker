@@ -6,6 +6,7 @@ import fitz  # PyMuPDF
 import numpy as np
 import cv2
 import torch
+import base64
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
 
@@ -63,12 +64,11 @@ if menu == "Upload & Analyze":
         name = uploaded.name
         st.markdown(f"**File:** {name}")
 
-        # ── PHOTO branch ─────────────────────────────────────────────
+        # ── IMAGE branch ─────────────────────────────────────────────
         if name.lower().endswith((".jpg", ".jpeg", ".png")):
             img = Image.open(uploaded).convert("RGB")
             st.image(img, caption="Original", use_container_width=True)
 
-            # ELA with stronger JPEG compression
             ela_img, hl_img, std, regions = analyze_ela(
                 img,
                 threshold=threshold,
@@ -93,7 +93,6 @@ if menu == "Upload & Analyze":
             with tabs[1]:
                 st.image(hl_img, use_container_width=True)
 
-            # ML-Based Detection
             if yolo_available:
                 st.markdown("### 🤖 ML Detector")
                 results = yolo(np.array(img))
@@ -112,11 +111,18 @@ if menu == "Upload & Analyze":
             feedback = st.radio("", ["Yes", "No"], key=name)
             if feedback == "No":
                 st.markdown("### ✏️ Mark the tampered regions")
+
+                # Convert PIL image to base64 URL for canvas
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                bg_b64 = base64.b64encode(buf.getvalue()).decode()
+                bg_url = f"data:image/png;base64,{bg_b64}"
+
                 canvas_result = st_canvas(
                     fill_color="rgba(255, 0, 0, 0.3)",
                     stroke_width=2,
                     stroke_color="#ff0000",
-                    background_image=np.array(img),
+                    background_image_url=bg_url,
                     update_streamlit=True,
                     height=img.height,
                     width=img.width,
@@ -127,16 +133,15 @@ if menu == "Upload & Analyze":
                     shapes = canvas_result.json_data["objects"]
                     os.makedirs("new_annotations/images", exist_ok=True)
                     os.makedirs("new_annotations/labels", exist_ok=True)
-                    # Save image
+
                     img.save(f"new_annotations/images/{name}")
-                    # Write YOLO .txt
                     label_path = f"new_annotations/labels/{os.path.splitext(name)[0]}.txt"
                     with open(label_path, "w") as ftxt:
                         for obj in shapes:
                             left, top = obj["left"], obj["top"]
                             w, h = obj["width"], obj["height"]
-                            x_c = (left + w / 2) / img.width
-                            y_c = (top + h / 2) / img.height
+                            x_c = (left + w/2) / img.width
+                            y_c = (top + h/2) / img.height
                             w_n = w / img.width
                             h_n = h / img.height
                             ftxt.write(f"0 {x_c:.6f} {y_c:.6f} {w_n:.6f} {h_n:.6f}\n")
@@ -145,9 +150,9 @@ if menu == "Upload & Analyze":
                 if st.button("Submit Feedback", key=name + "_btn"):
                     os.makedirs("logs", exist_ok=True)
                     log_path = "logs/feedback_log.csv"
-                    header = not os.path.exists(log_path)
+                    header_flag = not os.path.exists(log_path)
                     with open(log_path, "a") as f:
-                        if header:
+                        if header_flag:
                             f.write("timestamp,filename,std,regions,score,feedback\n")
                         f.write(f"{datetime.utcnow().isoformat()},{name},"
                                 f"{std:.2f},{regions},{score},{feedback}\n")
