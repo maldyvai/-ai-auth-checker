@@ -116,7 +116,7 @@ if menu == "Upload & Analyze":
                     fill_color="rgba(255, 0, 0, 0.3)",
                     stroke_width=2,
                     stroke_color="#ff0000",
-                    background_image=img,
+                    background_image=np.array(img),
                     update_streamlit=True,
                     height=img.height,
                     width=img.width,
@@ -135,8 +135,8 @@ if menu == "Upload & Analyze":
                         for obj in shapes:
                             left, top = obj["left"], obj["top"]
                             w, h = obj["width"], obj["height"]
-                            x_c = (left + w/2) / img.width
-                            y_c = (top + h/2) / img.height
+                            x_c = (left + w / 2) / img.width
+                            y_c = (top + h / 2) / img.height
                             w_n = w / img.width
                             h_n = h / img.height
                             ftxt.write(f"0 {x_c:.6f} {y_c:.6f} {w_n:.6f} {h_n:.6f}\n")
