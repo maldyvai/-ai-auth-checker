@@ -10,7 +10,7 @@ from datetime import datetime
 
 from helper import analyze_ela
 
-# ─── Streamlit Page Config ───────────────────────────────────────────────
+# ─── Page Config ───────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="VeriCheck AI",
     page_icon="📄",
@@ -37,7 +37,7 @@ with st.sidebar:
         help="Above = ⚠️ tampered"
     )
 
-# ─── Load YOLOv5 (if you have best.pt) ────────────────────────────────────
+# ─── Load YOLOv5 Model ─────────────────────────────────────────────────────
 @st.cache_resource
 def load_yolo(weights="best.pt"):
     try:
@@ -61,17 +61,21 @@ if menu == "Upload & Analyze":
     if uploaded:
         name = uploaded.name
         st.markdown(f"**File:** {name}")
-        
-        # IMAGE path
+
+        # ── PHOTO branch ─────────────────────────────────────────────
         if name.lower().endswith((".jpg",".jpeg",".png")):
             img = Image.open(uploaded).convert("RGB")
             st.image(img, caption="Original", use_container_width=True)
 
-            # ELA
-            # New call, using stronger JPEG compression ela_img, hl_img, std, regions = analyze_ela(     img,     threshold=threshold,     quality=60 )
+            # ELA with stronger JPEG compression
+            ela_img, hl_img, std, regions = analyze_ela(
+                img,
+                threshold=threshold,
+                quality=60
+            )
 
             st.markdown("### 🔍 ELA Results")
-            c1,c2,c3 = st.columns(3)
+            c1, c2, c3 = st.columns(3)
             c1.metric("Std Dev", f"{std:.2f}")
             c2.metric("Pixels", f"{regions}")
             if std > std_high:
@@ -88,21 +92,21 @@ if menu == "Upload & Analyze":
             with tabs[1]:
                 st.image(hl_img, use_container_width=True)
 
-            # ML Detector
+            # ML-Based Detection
             if yolo_available:
                 st.markdown("### 🤖 ML Detector")
                 results = yolo(np.array(img))
                 det = results.xyxy[0].cpu().numpy()
                 box_img = np.array(img).copy()
-                for *b,conf,cls in det:
-                    if conf>0.3:
-                        x1,y1,x2,y2 = map(int,b)
-                        cv2.rectangle(box_img,(x1,y1),(x2,y2),(0,255,0),2)
+                for *b, conf, cls in det:
+                    if conf > 0.3:
+                        x1, y1, x2, y2 = map(int, b)
+                        cv2.rectangle(box_img, (x1,y1), (x2,y2), (0,255,0), 2)
                 st.image(box_img, caption="YOLO Boxes", use_container_width=True)
             else:
                 st.info("No ML model loaded.")
 
-            # ── Feedback ────────────────────────────────────────────
+            # ── Feedback ───────────────────────────────────────────────
             st.markdown("#### Was this result correct?")
             feedback = st.radio("", ["Yes","No"], key=name)
             if st.button("Submit Feedback", key=name+"_btn"):
@@ -112,42 +116,53 @@ if menu == "Upload & Analyze":
                 with open(log_path, "a") as f:
                     if header:
                         f.write("timestamp,filename,std,regions,score,feedback\n")
-                    f.write(f"{datetime.utcnow().isoformat()},{name},{std:.2f},{regions},{score},{feedback}\n")
+                    f.write(f"{datetime.utcnow().isoformat()},{name},{std:.2f},"
+                            f"{regions},{score},{feedback}\n")
                 st.success("Thanks—feedback recorded.")
 
-        # PDF path
+        # ── PDF branch ───────────────────────────────────────────────
         elif name.lower().endswith(".pdf"):
             doc = fitz.open(stream=uploaded.read(), filetype="pdf")
             st.success(f"PDF with {len(doc)} pages")
-            for i,page in enumerate(doc):
+            for i, page in enumerate(doc):
                 st.markdown(f"### Page {i+1}")
-                # extract text
+
+                # Text
                 txt = page.get_text().strip() or "No text"
                 st.code(txt)
-                # extract images
-                for img_meta in page.get_images(full=True):
+
+                # Images on page
+                imgs = page.get_images(full=True)
+                for idx, img_meta in enumerate(imgs):
                     xref = img_meta[0]
                     base = doc.extract_image(xref)
-                    img = Image.open(io.BytesIO(base["image"])).convert("RGB")
-                    st.image(img, width=300)
-                    # New call, using stronger JPEG compression ela_img, hl_img, std, regions = analyze_ela(     img,     threshold=threshold,     quality=60 )
-                    st.image(ela_img, use_container_width=True)
-                    st.image(hl_img, use_container_width=True)
+                    page_img = Image.open(io.BytesIO(base["image"])).convert("RGB")
+                    st.image(page_img, caption=f"Image {idx+1}", width=300)
+
+                    # ELA on page image
+                    ela_img, hl_img, std, regions = analyze_ela(
+                        page_img,
+                        threshold=threshold,
+                        quality=60
+                    )
+                    st.image(ela_img, caption="ELA Analysis", use_container_width=True)
+                    st.image(hl_img, caption="Highlights", use_container_width=True)
                     st.write(f"**Std Dev:** {std:.2f} | **Pixels:** {regions}")
-                    if std>std_high:
+                    if std > std_high:
                         st.error("⚠️ Likely manipulated.")
-                    elif std<std_low:
+                    elif std < std_low:
                         st.success("✅ Authentic")
                     else:
                         st.warning("🔍 Uncertain")
 
-# ─── LOG VIEWER ────────────────────────────────────────────────────────────
+# ─── FEEDBACK LOG VIEWER ──────────────────────────────────────────────────
 elif menu == "Log":
     st.markdown("## Feedback Log")
-    if os.path.exists("logs/feedback_log.csv"):
-        st.dataframe(
-            open("logs/feedback_log.csv").read().splitlines()[1:],
-            columns=open("logs/feedback_log.csv").read().splitlines()[0].split(",")
-        )
+    log_path = "logs/feedback_log.csv"
+    if os.path.exists(log_path):
+        df = open(log_path).read().splitlines()
+        header = df[0].split(",")
+        rows = [row.split(",") for row in df[1:]]
+        st.dataframe(rows, columns=header)
     else:
-        st.info("No feedback yet.")
+        st.info("No feedback logged yet.")
