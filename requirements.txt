@@ -4,3 +4,4 @@ PyMuPDF
 numpy
 torch
 opencv-python-headless
+streamlit-drawable-canvas
