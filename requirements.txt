@@ -3,6 +3,4 @@ streamlit-drawable-canvas==0.9.3
 pillow
 numpy
 opencv-python-headless
-torch
-ultralytics
-PyYAML
+torch>=2.0.0,<3.0.0
