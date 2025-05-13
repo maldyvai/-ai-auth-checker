@@ -1,8 +1,8 @@
-streamlit>=1.24.1
+streamlit>=1.24.1,<2.0.0
 streamlit-drawable-canvas>=0.10.0
+pillow
+numpy
+opencv-python
 torch
 ultralytics
 PyMuPDF
-opencv-python
-pillow
-numpy
