@@ -1,3 +1,7 @@
+import sys
+import streamlit.web.elements.image as _web_image
+sys.modules['streamlit.elements.image'] = _web_image
+
 import streamlit as st
 from PIL import Image, ImageDraw
 import io
