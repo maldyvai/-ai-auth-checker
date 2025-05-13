@@ -1,7 +1,3 @@
-from streamlit.elements.image import image_to_url
-import streamlit.elements.image as st_image
-
-st_image.image_to_url = image_to_url
 import streamlit as st
 from PIL import Image
 import io
