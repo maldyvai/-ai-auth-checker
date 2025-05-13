@@ -111,7 +111,9 @@ if menu == "Upload & Analyze":
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
                 canvas_result = st_canvas(
                     fill_color="rgba(255, 0, 0, 0.3)",
                     stroke_width=2,
