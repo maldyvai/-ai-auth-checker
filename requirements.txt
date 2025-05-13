@@ -5,3 +5,5 @@ numpy
 torch
 opencv-python-headless
 streamlit-drawable-canvas
+streamlit==1.40.0
+streamlit-drawable-canvas==0.10.0
