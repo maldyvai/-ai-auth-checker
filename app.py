@@ -1,4 +1,3 @@
-import numpy as np
 import streamlit as st
 from PIL import Image
 import io
@@ -7,6 +6,7 @@ import fitz  # PyMuPDF
 import numpy as np
 import cv2
 import torch
+import base64
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
 
@@ -106,11 +106,17 @@ if menu == "Upload & Analyze":
             feedback = st.radio("", ["Yes","No"], key=name)
             if feedback == "No":
                 st.markdown("### ✏️ Mark the tampered regions")
+
+                # Encode PIL image as base64 data-URI
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
                 canvas_result = st_canvas(
                     fill_color="rgba(255, 0, 0, 0.3)",
                     stroke_width=2,
                     stroke_color="#ff0000",
-                    background_image=np.array(img),
+                    background_image_url=uri,
                     update_streamlit=True,
                     height=img.height,
                     width=img.width,
@@ -119,12 +125,9 @@ if menu == "Upload & Analyze":
                 )
                 if st.button("Save Annotations", key=name+"_annotate"):
                     shapes = canvas_result.json_data["objects"]
-                    # ensure dirs exist
                     os.makedirs("new_annotations/images", exist_ok=True)
                     os.makedirs("new_annotations/labels", exist_ok=True)
-                    # save the image
                     img.save(f"new_annotations/images/{name}")
-                    # write YOLO txt
                     lbl = os.path.splitext(name)[0] + ".txt"
                     with open(f"new_annotations/labels/{lbl}", "w") as f:
                         for obj in shapes:
@@ -140,13 +143,13 @@ if menu == "Upload & Analyze":
             else:
                 if st.button("Submit Feedback", key=name+"_btn"):
                     os.makedirs("logs", exist_ok=True)
-                    log_path = "logs/feedback_log.csv"
-                    header = not os.path.exists(log_path)
-                    with open(log_path,"a") as f:
+                    path = "logs/feedback_log.csv"
+                    header = not os.path.exists(path)
+                    with open(path,"a") as f:
                         if header:
                             f.write("timestamp,filename,std,regions,score,feedback\n")
-                        f.write(f"{datetime.utcnow().isoformat()},{name},"
-                                f"{std:.2f},{regions},{score},{feedback}\n")
+                        f.write(f"{datetime.utcnow().isoformat()},"
+                                f"{name},{std:.2f},{regions},{score},{feedback}\n")
                     st.success("Thank you—feedback recorded!")
 
         # ── PDF branch ───────────────────────────────────────────────
@@ -155,25 +158,20 @@ if menu == "Upload & Analyze":
             st.success(f"PDF with {len(doc)} pages")
             for i, page in enumerate(doc):
                 st.markdown(f"### Page {i+1}")
-                # text
                 txt = page.get_text().strip() or "No text"
                 st.code(txt)
-                # images
                 for img_meta in page.get_images(full=True):
                     xref = img_meta[0]
                     base = doc.extract_image(xref)
                     page_img = Image.open(io.BytesIO(base["image"])).convert("RGB")
                     st.image(page_img, width=300)
-                    # ELA on page image
-                    ela_img, hl_img, std, regions = analyze_ela(
-                        page_img, threshold=threshold, quality=60
-                    )
-                    st.image(ela_img, use_container_width=True)
-                    st.image(hl_img, use_container_width=True)
-                    st.write(f"Std Dev: {std:.2f} | Pixels: {regions}")
-                    if std>std_high:      st.error("⚠️ Tampered")
-                    elif std<std_low:     st.success("✅ Authentic")
-                    else:                 st.warning("🔍 Uncertain")
+                    ela_i, hl_i, s, r = analyze_ela(page_img, threshold=threshold, quality=60)
+                    st.image(ela_i, use_container_width=True)
+                    st.image(hl_i, use_container_width=True)
+                    st.write(f"Std Dev: {s:.2f} | Pixels: {r}")
+                    if s>std_high:   st.error("⚠️ Tampered")
+                    elif s<std_low:  st.success("✅ Authentic")
+                    else:            st.warning("🔍 Uncertain")
 
 elif menu == "Log":
     st.markdown("## Feedback Log")
@@ -181,7 +179,7 @@ elif menu == "Log":
     if os.path.exists(path):
         lines = open(path).read().splitlines()
         hdr = lines[0].split(",")
-        rows= [r.split(",") for r in lines[1:]]
+        rows = [r.split(",") for r in lines[1:]]
         st.dataframe(rows, columns=hdr)
     else:
         st.info("No feedback logged yet.")
