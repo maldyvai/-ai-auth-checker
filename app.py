@@ -67,6 +67,7 @@ else:
             fill_color="rgba(255, 0, 0, 0.3)",
             stroke_width=2,
             stroke_color="#ff0000",
+            background_image=np.array(img),   # pass raw image array
             update_streamlit=True,
             height=img.height,
             width=img.width,
